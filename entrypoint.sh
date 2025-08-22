@@ -101,7 +101,7 @@ export DATABASE_URL=$ORIGINAL_DATABASE_URL
 
 # Verify the application can import
 info_msg "Verifying application modules..."
-python -c "import pkg.api.main" 2>/dev/null || \
+python -c "import apps.api.main" 2>/dev/null || \
     error_exit "Failed to import application modules. Check your PYTHONPATH and module structure"
 
 success_msg "Application modules verified"

@@ -10,6 +10,7 @@ help:
 	@echo "🔧 Development:"
 	@echo "  dev-up       - Start development environment"
 	@echo "  dev-down     - Stop development environment"
+	@echo "  dev-backup   - Backup development database"
 	@echo "  logs         - Follow development logs"
 	@echo "  health       - Check service health"
 	@echo ""
@@ -46,6 +47,10 @@ dev-up:
 dev-down:
 	@echo "Stopping development environment..."
 	$(DC_DEV) down -v
+
+dev-backup:
+	@echo "💾 Backing up development database..."
+	@./scripts/backup-dev.sh
 
 logs:
 	$(DC_DEV) logs -f --tail=200
@@ -93,8 +98,27 @@ nas-health:
 nas-backup:
 	@echo "💾 Running production backup..."
 	@read -p "Enter NAS username: " nas_user && \
-	ssh $$nas_user@192.168.1.11 "/volume1/docker/trading-service/backup.sh" && \
+	ssh $$nas_user@192.168.1.11 "sudo /volume1/docker/trading-service/nas-backup.sh" && \
 	echo "Backup completed!"
+
+nas-backup-setup:
+	@echo "🔧 Setting up automated backups on NAS..."
+	@chmod +x scripts/setup-nas-scheduler.sh
+	@./scripts/setup-nas-scheduler.sh
+
+nas-backup-check:
+	@echo "📊 Checking backup status..."
+	@read -p "Enter NAS username: " nas_user && \
+	ssh $$nas_user@192.168.1.11 "/volume1/docker/trading-service/check-backup.sh"
+
+nas-backup-list:
+	@echo "📋 Listing backups on NAS..."
+	@read -p "Enter NAS username: " nas_user && \
+	ssh $$nas_user@192.168.1.11 "ls -lht /volume1/docker/trading-service/postgres_backups/*.sql.gz | head -20"
+
+nas-cleanup:
+	@echo "🧹 Cleaning up NAS disk space..."
+	@./scripts/cleanup-nas.sh
 
 nas-restore:
 	@echo "🔄 Restoring production database..."

@@ -51,6 +51,8 @@ def test_orders_endpoint_with_auth(client):
          patch("apps.api.routers.orders.RiskEngine") as mock_risk, \
          patch("apps.api.routers.orders.DummyBroker") as mock_broker, \
          patch("apps.api.routers.orders.OrderRepository") as mock_repo, \
+         patch("apps.api.routers.orders.FillRepository") as mock_fill_repo, \
+         patch("apps.api.routers.orders.PositionRepository") as mock_pos_repo, \
          patch("apps.api.routers.orders.send_webhook") as mock_webhook:
         
         mock_settings.return_value.api_token = "test_token"
@@ -60,9 +62,20 @@ def test_orders_endpoint_with_auth(client):
         )
         mock_repo.return_value.get_by_idempotency_key = AsyncMock(return_value=None)
         mock_repo.return_value.create = AsyncMock(
-            return_value=AsyncMock(id="ord_test123", status="pending")
+            return_value=AsyncMock(id="ord_test123", status="pending", filled_qty=0, avg_price=0)
         )
         mock_repo.return_value.update = AsyncMock()
+        
+        # Mock fill repository
+        mock_fill_repo.return_value.create = AsyncMock()
+        
+        # Mock position repository
+        mock_position = AsyncMock(qty=0, avg_price=0, notional=0)
+        mock_pos_repo.return_value.get_or_create = AsyncMock(return_value=mock_position)
+        mock_pos_repo.return_value.update = AsyncMock()
+        
+        # Mock webhook
+        mock_webhook.return_value = AsyncMock()
         
         response = client.post(
             "/orders",

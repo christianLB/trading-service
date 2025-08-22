@@ -4,22 +4,41 @@
 
 set -e
 
+# Detect environment (NAS or local)
+if [ -d "/volume1" ]; then
+    # NAS environment
+    BACKUP_DIR="/volume1/docker/trading-service/postgres_backups"
+    LOG_FILE="/volume1/docker/trading-service/logs/backup.log"
+    SECONDARY_BACKUP="/volume1/backups/trading-service"
+else
+    # Local/development environment
+    BACKUP_DIR="./backups/postgres"
+    LOG_FILE="./logs/backup.log"
+    SECONDARY_BACKUP=""
+fi
+
 # Configuration
-BACKUP_DIR="/volume1/docker/trading-service/postgres_backups"
 CONTAINER_NAME="deploy-db-1"
 DB_NAME="trading"
 DB_USER="postgres"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 BACKUP_FILE="backup_${TIMESTAMP}.sql.gz"
-RETENTION_DAYS=30
-LOG_FILE="/volume1/docker/trading-service/logs/backup.log"
+RETENTION_DAYS=${RETENTION_DAYS:-30}
 
-# Ensure log directory exists
-mkdir -p $(dirname $LOG_FILE)
+# Ensure directories exist (only if we have permissions)
+if [ -w "." ] || [ ! -d "/volume1" ]; then
+    # Local environment - create directories
+    mkdir -p $(dirname $LOG_FILE) 2>/dev/null || true
+    mkdir -p $BACKUP_DIR 2>/dev/null || true
+fi
 
 # Function to log messages
 log_message() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a $LOG_FILE
+    MSG="[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+    echo "$MSG"
+    if [ -w "$LOG_FILE" ] || [ -w "$(dirname $LOG_FILE)" ] 2>/dev/null; then
+        echo "$MSG" >> $LOG_FILE
+    fi
 }
 
 # Start backup
@@ -31,8 +50,10 @@ if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
     exit 1
 fi
 
-# Ensure backup directory exists
-mkdir -p $BACKUP_DIR
+# Ensure backup directory exists (only if we have permissions)
+if [ -w "$(dirname $BACKUP_DIR)" ] 2>/dev/null || [ ! -d "/volume1" ]; then
+    mkdir -p $BACKUP_DIR 2>/dev/null || true
+fi
 
 # Perform database backup
 log_message "Backing up database to ${BACKUP_FILE}..."
@@ -61,9 +82,8 @@ find $BACKUP_DIR -name "backup_*.sql.gz" -mtime +${RETENTION_DAYS} -delete
 BACKUP_COUNT=$(ls -1 $BACKUP_DIR/backup_*.sql.gz 2>/dev/null | wc -l)
 log_message "Retention cleanup complete. ${BACKUP_COUNT} backups remaining."
 
-# Optional: Sync to secondary location
-SECONDARY_BACKUP="/volume1/backups/trading-service"
-if [ -d "/volume1/backups" ]; then
+# Optional: Sync to secondary location (only on NAS)
+if [ -n "$SECONDARY_BACKUP" ] && [ -d "$(dirname $SECONDARY_BACKUP)" ]; then
     log_message "Syncing to secondary backup location..."
     mkdir -p $SECONDARY_BACKUP
     rsync -av --delete $BACKUP_DIR/ $SECONDARY_BACKUP/

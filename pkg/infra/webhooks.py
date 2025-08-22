@@ -16,7 +16,7 @@ async def send_webhook(event_type: str, data: Dict[str, Any]):
     settings = get_settings()
     
     if not settings.webhook_url:
-        logger.debug("Webhook URL not configured, skipping", event=event_type)
+        logger.debug("Webhook URL not configured, skipping", event_type=event_type)
         return
     
     payload = {
@@ -47,12 +47,12 @@ async def send_webhook(event_type: str, data: Dict[str, Any]):
             if response.is_error:
                 logger.warning(
                     "Webhook failed",
-                    event=event_type,
+                    event_type=event_type,
                     status_code=response.status_code,
                     response=response.text,
                 )
             else:
-                logger.info("Webhook sent", event=event_type, status_code=response.status_code)
+                logger.info("Webhook sent", event_type=event_type, status_code=response.status_code)
     
     except Exception as e:
-        logger.error("Webhook error", event=event_type, error=str(e))
+        logger.error("Webhook error", event_type=event_type, error=str(e))

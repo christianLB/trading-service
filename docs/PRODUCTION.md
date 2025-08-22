@@ -220,6 +220,51 @@ Key metrics to monitor:
 - `risk_blocks_total` - Risk validation failures
 - `order_latency_seconds` - Order processing time
 
+## 💾 Disk Management
+
+### Monitoring Disk Usage
+
+```bash
+# Check current usage
+ssh k2600x@192.168.1.11 "df -h /volume1"
+
+# Clean Docker artifacts
+ssh k2600x@192.168.1.11 "docker system prune -a"
+
+# Review backup sizes
+ssh k2600x@192.168.1.11 "du -sh /volume1/docker/trading-service/postgres_backups/*"
+```
+
+### Disk Usage Thresholds
+
+- **<70%**: Normal operation
+- **70-80%**: Monitor daily
+- **80-85%**: ⚠️ Warning - cleanup required
+- **85-90%**: 🔴 Critical - immediate action
+- **>90%**: 🚨 Emergency - service degradation likely
+
+### Cleanup Procedures
+
+1. **Docker cleanup** (recovers ~1-5GB)
+   ```bash
+   ssh k2600x@192.168.1.11 "docker system prune -a --volumes"
+   ```
+
+2. **Reduce backup retention** (recovers variable)
+   ```bash
+   # Edit backup.sh RETENTION_DAYS from 30 to 14
+   ssh k2600x@192.168.1.11 "sed -i 's/RETENTION_DAYS=30/RETENTION_DAYS=14/' /volume1/docker/trading-service/backup.sh"
+   ```
+
+3. **Archive old logs** (recovers ~100MB-1GB)
+   ```bash
+   ssh k2600x@192.168.1.11 "find /volume1/docker/trading-service/logs -name '*.log' -mtime +7 -exec gzip {} \;"
+   ```
+
+### Known Issues
+
+- **2025-08-22**: Disk usage at 80% - see [issue report](./issues/2025-08-22-nas-disk-usage.md)
+
 ## 🛠️ Maintenance
 
 ### Restart Services

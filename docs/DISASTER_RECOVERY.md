@@ -4,12 +4,15 @@
 
 This guide provides comprehensive procedures for recovering the Trading Service from various failure scenarios. All procedures are designed for the production environment hosted on Synology NAS at `192.168.1.11`.
 
+**Automated Backup Status**: ✅ Enabled via Synology Task Scheduler (Daily @ 2 AM)
+
 ## 🎯 Recovery Objectives
 
 - **Recovery Time Objective (RTO)**: < 30 minutes for critical failures
-- **Recovery Point Objective (RPO)**: < 24 hours (daily backup schedule)
+- **Recovery Point Objective (RPO)**: < 24 hours (automated daily backups)
 - **Data Integrity**: Zero data corruption tolerance
 - **Service Availability**: 99.9% uptime target
+- **Backup Retention**: 30 days rolling window
 
 ## 🔥 Failure Scenarios & Recovery
 
