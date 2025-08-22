@@ -7,6 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
     
+    app_name: str = "trading-service"
     app_env: str = "dev"
     api_port: int = 8080
     

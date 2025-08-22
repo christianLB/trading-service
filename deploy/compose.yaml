@@ -38,7 +38,7 @@ services:
     image: postgres:16-alpine
     environment:
       - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-postgres}
       - POSTGRES_DB=trading
     ports:
       - "5439:5432"
