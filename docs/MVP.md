@@ -98,7 +98,7 @@ logs:
 	$(DC_DEV) logs -f --tail=200
 
 health:
-	curl -sS http://localhost:8080/healthz | jq .
+	curl -sS http://localhost:8085/healthz | jq .
 
 prod-build:
 	$(DC_PROD) build
@@ -107,11 +107,11 @@ prod-up:
 	$(DC_PROD) up -d
 
 nas-setup:
-	docker context create nas --docker "host=ssh://usuario@nas"
-	docker context use nas
+	docker context create nas --docker "host=ssh://k2600x@192.168.1.11"
+	# Creates directories and copies scripts to NAS
 
 nas-deploy:
-	$(DC_NAS) up -d --build
+	./scripts/deploy.sh  # Builds locally, transfers image, and deploys to NAS
 ```
 
 ## Notas finales

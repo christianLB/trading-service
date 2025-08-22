@@ -20,8 +20,8 @@ Copiá `.env.sample` a `.env.dev` y `.env.prod`.
 
 ```env
 APP_ENV=dev
-API_PORT=8080
-DATABASE_URL=postgresql+psycopg://postgres:postgres@db:5432/trading
+API_PORT=8085
+DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/trading
 REDIS_URL=redis://redis:6379/0
 BROKER=dummy
 EXCHANGE=binance
@@ -41,7 +41,7 @@ make dev-up
 make health
 curl -H "Authorization: Bearer change_me" -H "Content-Type: application/json" \
   -d '{"symbol":"BTC/USDT","side":"buy","type":"market","qty":0.01}' \
-  http://localhost:8080/orders
+  http://localhost:8085/orders
 make logs
 ```
 
@@ -57,7 +57,7 @@ make prod-up
 Primero hacé el setup una única vez:
 
 ```bash
-make nas-setup   # crea contexto Docker remoto "nas" via SSH
+make nas-setup   # crea contexto Docker remoto "nas" via SSH (192.168.1.11)
 ```
 
 Luego, cada release al NAS se hace con **un solo comando**:
@@ -66,7 +66,17 @@ Luego, cada release al NAS se hace con **un solo comando**:
 make nas-deploy
 ```
 
-Esto ejecuta en el NAS: build de imágenes en modo `prod` + `compose up -d` con el perfil `prod` y el `.env.prod`.
+Esto ejecuta: build local de imágenes en modo `prod`, transferencia al NAS, y despliegue con el `.env.prod`.
+
+### Comandos útiles de NAS:
+
+```bash
+make nas-status   # Ver estado de contenedores
+make nas-logs     # Ver logs en tiempo real
+make nas-health   # Ejecutar health check completo
+make nas-restart  # Reiniciar servicios
+make nas-backup   # Backup de base de datos
+```
 
 > **Nota**: asegurate de completar `.env.prod` con credenciales/URLs reales antes de `nas-deploy`.
 
@@ -81,12 +91,22 @@ Ver [BOOTSTRAP.md](./BOOTSTRAP.md) para la estructura completa de carpetas y con
 
 ## Roadmap breve
 
-1. Persistencia real con SQLAlchemy/Alembic.
+1. ✅ Persistencia real con SQLAlchemy/Alembic.
 2. Adapter CCXT (Binance/Bybit).
 3. Idempotencia robusta + reconciliación.
 4. Kill‑switch y límites por símbolo.
+5. Backtesting engine con datos históricos.
+6. WebSocket para actualizaciones en tiempo real.
+
+## Repositorio
+
+- **GitHub**: https://github.com/christianLB/trading-service
+- **Branch principal**: `main`
+- **Producción**: Desplegado en NAS Synology (192.168.1.11:8085)
 
 ## Documentación adicional
 
 - [BOOTSTRAP.md](./BOOTSTRAP.md) - Configuración inicial y estructura del repositorio
 - [docs/MVP.md](./docs/MVP.md) - Definición del MVP y criterios de aceptación
+- [docs/PRODUCTION.md](./docs/PRODUCTION.md) - Guía de producción y monitoreo
+- [docs/DISASTER_RECOVERY.md](./docs/DISASTER_RECOVERY.md) - Plan de recuperación ante desastres

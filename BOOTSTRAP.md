@@ -44,7 +44,8 @@ trading-service/
 
 ## 4) Flujo de trabajo (git y PRs)
 
-- **main** protegido. **feat/** para features, **fix/** para hotfixes.
+- **main** branch en GitHub: https://github.com/christianLB/trading-service
+- **feat/** para features, **fix/** para hotfixes.
 - Cada cambio que afecte API/eventos **debe tocar `contracts/`** y versionar OpenAPI.
 - No se mergea si no pasan: lint, tests, build.
 
@@ -55,8 +56,11 @@ trading-service/
 - `make health` → chequeo `/healthz`.
 - `make prod-build` → build imágenes modo prod.
 - `make prod-up` → levanta perfil prod **en local**.
-- `make nas-setup` → (una sola vez) crea contexto Docker remoto al NAS.
-- `make nas-deploy` → **un solo comando** para desplegar en NAS (build+up con perfil prod).
+- `make nas-setup` → (una sola vez) crea contexto Docker remoto al NAS (192.168.1.11).
+- `make nas-deploy` → **un solo comando** para desplegar en NAS (build local, transfer, deploy).
+- `make nas-status` → muestra estado de contenedores en producción.
+- `make nas-logs` → muestra logs de producción.
+- `make nas-health` → ejecuta health check completo.
 
 ## 6) Requisitos mínimos del host
 

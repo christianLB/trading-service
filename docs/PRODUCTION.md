@@ -204,7 +204,7 @@ make nas-health
 make nas-logs
 
 # View specific container logs via SSH
-ssh username@192.168.1.11 "docker logs deploy-api-1 --tail 100"
+ssh k2600x@192.168.1.11 "sudo /usr/local/bin/docker logs trading-service-api-1 --tail 100"
 ```
 
 ### Metrics Endpoint
@@ -244,7 +244,7 @@ make nas-exec
 # Enter: /bin/sh
 
 # Direct command
-docker --context nas exec deploy-api-1 alembic current
+ssh k2600x@192.168.1.11 "sudo /usr/local/bin/docker exec trading-service-api-1 alembic current"
 ```
 
 ### Update Configuration
@@ -272,10 +272,10 @@ ssh username@192.168.1.11 "df -h /volume1"
 
 ```bash
 # Test database connection
-docker --context nas exec deploy-db-1 psql -U postgres -c "SELECT 1"
+ssh k2600x@192.168.1.11 "sudo /usr/local/bin/docker exec trading-service-db-1 psql -U postgres -c 'SELECT 1'"
 
 # Check database logs
-docker --context nas logs deploy-db-1 --tail 50
+ssh k2600x@192.168.1.11 "sudo /usr/local/bin/docker logs trading-service-db-1 --tail 50"
 ```
 
 ### Port Conflicts
@@ -325,15 +325,15 @@ Adjust based on NAS capabilities and load.
 
 ### Database Optimization
 
-```sql
--- Connect to production database
-docker --context nas exec -it deploy-db-1 psql -U postgres trading
+```bash
+# Connect to production database
+ssh -t k2600x@192.168.1.11 "sudo /usr/local/bin/docker exec -it trading-service-db-1 psql -U postgres trading"
 
--- Check slow queries
-SELECT query, calls, mean_exec_time
-FROM pg_stat_statements
-ORDER BY mean_exec_time DESC
-LIMIT 10;
+# Check slow queries (after connecting to psql)
+# SELECT query, calls, mean_exec_time
+# FROM pg_stat_statements
+# ORDER BY mean_exec_time DESC
+# LIMIT 10;
 ```
 
 ## 📝 Operational Checklist
