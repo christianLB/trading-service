@@ -10,123 +10,125 @@ set -e
 
 # Paths (NAS specific)
 BACKUP_DIR="/volume1/docker/trading-service/postgres_backups"
-CONTAINER_NAME="trading-service-db-1"
+CONTAINER_NAME="trading-service-db"
+DOCKER_CMD="/usr/local/bin/docker"
 DB_NAME="trading"
 DB_USER="postgres"
 LOG_FILE="/volume1/docker/trading-service/logs/backup.log"
 LOCK_FILE="/tmp/trading-backup.lock"
 
 # Backup settings
-RETENTION_DAYS=${RETENTION_DAYS:-30}
-TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-BACKUP_FILE="backup_${TIMESTAMP}.sql.gz"
-MAX_BACKUP_SIZE=$((5 * 1024 * 1024 * 1024))  # 5GB max backup size
+MAX_BACKUPS=30  # Keep 30 days of backups
+BACKUP_PREFIX="trading_db"
+DATE_FORMAT="%Y%m%d_%H%M%S"
 
-# Notification settings (optional)
-NOTIFY_EMAIL="${BACKUP_NOTIFY_EMAIL:-}"
-NOTIFY_ON_ERROR=true
+# Email notification (optional)
 NOTIFY_ON_SUCCESS=false
+NOTIFY_ON_ERROR=true
+EMAIL_TO="admin@example.com"
+EMAIL_SUBJECT_PREFIX="[Trading Service Backup]"
 
 # ============================================================================
 # FUNCTIONS
 # ============================================================================
 
-# Ensure log directory exists
-mkdir -p $(dirname $LOG_FILE)
-
-# Function to log messages
+# Logging function
 log_message() {
     local level=$1
-    shift
-    local message="$@"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$level] $message" | tee -a $LOG_FILE
+    local message=$2
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    echo "[$timestamp] [$level] $message" | tee -a "$LOG_FILE"
 }
 
-# Function to send notification
+# Email notification function (uses Synology's built-in mail system)
 send_notification() {
-    local subject=$1
-    local body=$2
+    local subject="$1"
+    local body="$2"
     
-    if [ -n "$NOTIFY_EMAIL" ]; then
-        echo "$body" | mail -s "Trading Service Backup: $subject" "$NOTIFY_EMAIL" 2>/dev/null || true
-    fi
-    
-    # Also log to Synology notification center if available
-    if command -v synologset1 >/dev/null 2>&1; then
-        synologset1 sys err 0x11800000 "Trading Service Backup: $subject"
+    if command -v synodsmnotify &> /dev/null; then
+        synodsmnotify @administrators "$EMAIL_SUBJECT_PREFIX $subject" "$body"
+    else
+        log_message "WARNING" "synodsmnotify not available, skipping email notification"
     fi
 }
 
-# Function to cleanup on exit
-cleanup() {
-    rm -f $LOCK_FILE
+# Cleanup old backups
+cleanup_old_backups() {
+    log_message "INFO" "Cleaning up old backups (keeping last $MAX_BACKUPS)"
+    
+    # Count existing backups
+    local backup_count=$(ls -1 ${BACKUP_DIR}/${BACKUP_PREFIX}_*.sql.gz 2>/dev/null | wc -l)
+    
+    if [ $backup_count -gt $MAX_BACKUPS ]; then
+        local backups_to_delete=$((backup_count - MAX_BACKUPS))
+        log_message "INFO" "Removing $backups_to_delete old backup(s)"
+        
+        # Remove oldest backups
+        ls -1t ${BACKUP_DIR}/${BACKUP_PREFIX}_*.sql.gz | tail -n $backups_to_delete | while read backup; do
+            rm "$backup"
+            log_message "INFO" "Removed old backup: $(basename $backup)"
+        done
+    else
+        log_message "INFO" "No cleanup needed ($backup_count backups found)"
+    fi
 }
 
-# Function to check disk space
+# Check disk space
 check_disk_space() {
-    local available=$(df /volume1 | awk 'NR==2 {print $4}')
-    local required=$((1024 * 1024))  # Require at least 1GB free
+    local required_space_mb=500  # Require at least 500MB free
+    local available_space_kb=$(df "$BACKUP_DIR" | awk 'NR==2 {print $4}')
+    local available_space_mb=$((available_space_kb / 1024))
     
-    if [ $available -lt $required ]; then
-        log_message "ERROR" "Insufficient disk space. Available: ${available}KB, Required: ${required}KB"
+    if [ $available_space_mb -lt $required_space_mb ]; then
+        log_message "ERROR" "Insufficient disk space: ${available_space_mb}MB available, ${required_space_mb}MB required"
         return 1
     fi
+    
+    log_message "INFO" "Disk space check passed: ${available_space_mb}MB available"
     return 0
 }
 
-# Function to verify backup
-verify_backup() {
-    local backup_path=$1
-    
-    # Check if file exists and is not empty
-    if [ ! -f "$backup_path" ] || [ ! -s "$backup_path" ]; then
-        return 1
+# Calculate backup size
+get_backup_size() {
+    local file=$1
+    if [ -f "$file" ]; then
+        local size_bytes=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file" 2>/dev/null)
+        local size_mb=$((size_bytes / 1024 / 1024))
+        echo "${size_mb}MB"
+    else
+        echo "0MB"
     fi
-    
-    # Test gzip integrity
-    if ! gunzip -t "$backup_path" 2>/dev/null; then
-        return 1
-    fi
-    
-    # Check file size is reasonable
-    local size=$(stat -c%s "$backup_path")
-    if [ $size -gt $MAX_BACKUP_SIZE ]; then
-        log_message "WARNING" "Backup size ($size bytes) exceeds maximum ($MAX_BACKUP_SIZE bytes)"
-    fi
-    
-    return 0
 }
 
 # ============================================================================
-# MAIN SCRIPT
+# MAIN BACKUP PROCESS
 # ============================================================================
 
-# Set trap for cleanup
-trap cleanup EXIT
+log_message "INFO" "Starting automated database backup"
 
-# Check if another backup is running
+# Check for lock file (prevent concurrent backups)
 if [ -f "$LOCK_FILE" ]; then
-    log_message "WARNING" "Another backup is already running (lock file exists)"
-    exit 0
+    log_message "ERROR" "Backup already in progress (lock file exists)"
+    if [ "$NOTIFY_ON_ERROR" = true ]; then
+        send_notification "Backup Failed" "Another backup is already running"
+    fi
+    exit 1
 fi
 
 # Create lock file
-echo $$ > $LOCK_FILE
-
-# Start backup process
-log_message "INFO" "Starting automated database backup"
+touch "$LOCK_FILE"
+trap "rm -f $LOCK_FILE" EXIT
 
 # Check disk space
 if ! check_disk_space; then
-    log_message "ERROR" "Pre-flight check failed: insufficient disk space"
     if [ "$NOTIFY_ON_ERROR" = true ]; then
-        send_notification "Backup Failed" "Insufficient disk space on NAS"
+        send_notification "Backup Failed" "Insufficient disk space"
     fi
     exit 1
 fi
 
 # Check if container is running
-if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+if ! $DOCKER_CMD ps --format '{{.Names}}' | grep -q "${CONTAINER_NAME}"; then
     log_message "ERROR" "Container ${CONTAINER_NAME} is not running"
     if [ "$NOTIFY_ON_ERROR" = true ]; then
         send_notification "Backup Failed" "Database container is not running"
@@ -138,93 +140,60 @@ fi
 mkdir -p $BACKUP_DIR
 
 # Get database password from container environment
-DB_PASSWORD=$(docker exec $CONTAINER_NAME printenv POSTGRES_PASSWORD 2>/dev/null || echo "")
+DB_PASSWORD=$($DOCKER_CMD exec $CONTAINER_NAME printenv POSTGRES_PASSWORD 2>/dev/null || echo "")
 if [ -z "$DB_PASSWORD" ]; then
     log_message "WARNING" "Could not retrieve database password, attempting without password"
 fi
 
-# Perform database backup
-log_message "INFO" "Creating backup: ${BACKUP_FILE}"
-BACKUP_PATH="${BACKUP_DIR}/${BACKUP_FILE}"
+# Generate backup filename
+TIMESTAMP=$(date +"$DATE_FORMAT")
+BACKUP_PATH="${BACKUP_DIR}/${BACKUP_PREFIX}_${TIMESTAMP}.sql.gz"
 
-# Execute backup with error handling
-if docker exec $CONTAINER_NAME sh -c "PGPASSWORD='$DB_PASSWORD' pg_dump -U $DB_USER -d $DB_NAME --verbose --no-owner --no-acl" 2>>$LOG_FILE | gzip -9 > "${BACKUP_PATH}.tmp"; then
+# Perform backup
+log_message "INFO" "Starting backup to: $(basename $BACKUP_PATH)"
+if $DOCKER_CMD exec $CONTAINER_NAME sh -c "PGPASSWORD='$DB_PASSWORD' pg_dump -U $DB_USER -d $DB_NAME --verbose --no-owner --no-acl" 2>>$LOG_FILE | gzip -9 > "${BACKUP_PATH}.tmp"; then
     # Move temp file to final location
     mv "${BACKUP_PATH}.tmp" "$BACKUP_PATH"
     
     # Get backup size
-    BACKUP_SIZE=$(du -h "$BACKUP_PATH" | cut -f1)
-    log_message "INFO" "Backup created successfully. Size: ${BACKUP_SIZE}"
+    BACKUP_SIZE=$(get_backup_size "$BACKUP_PATH")
+    
+    log_message "SUCCESS" "Backup completed successfully: $(basename $BACKUP_PATH) (Size: $BACKUP_SIZE)"
     
     # Verify backup integrity
-    if verify_backup "$BACKUP_PATH"; then
-        log_message "INFO" "Backup verification passed"
+    if gunzip -t "$BACKUP_PATH" 2>/dev/null; then
+        log_message "INFO" "Backup integrity verified"
     else
-        log_message "ERROR" "Backup verification failed"
-        rm -f "$BACKUP_PATH"
+        log_message "ERROR" "Backup integrity check failed!"
+        rm "$BACKUP_PATH"
         if [ "$NOTIFY_ON_ERROR" = true ]; then
-            send_notification "Backup Failed" "Backup verification failed for ${BACKUP_FILE}"
+            send_notification "Backup Failed" "Backup integrity check failed"
         fi
         exit 1
     fi
+    
+    # Cleanup old backups
+    cleanup_old_backups
+    
+    # Send success notification if enabled
+    if [ "$NOTIFY_ON_SUCCESS" = true ]; then
+        send_notification "Backup Successful" "Database backed up successfully (${BACKUP_SIZE})"
+    fi
+    
+    # Log statistics
+    TOTAL_BACKUPS=$(ls -1 ${BACKUP_DIR}/${BACKUP_PREFIX}_*.sql.gz 2>/dev/null | wc -l)
+    TOTAL_SIZE=$(du -sh ${BACKUP_DIR}/${BACKUP_PREFIX}_*.sql.gz 2>/dev/null | tail -1 | cut -f1)
+    log_message "INFO" "Backup statistics: $TOTAL_BACKUPS backups, Total size: $TOTAL_SIZE"
+    
 else
-    log_message "ERROR" "Backup creation failed"
+    log_message "ERROR" "Backup failed!"
     rm -f "${BACKUP_PATH}.tmp"
+    
     if [ "$NOTIFY_ON_ERROR" = true ]; then
-        send_notification "Backup Failed" "Failed to create backup ${BACKUP_FILE}"
+        send_notification "Backup Failed" "Database backup failed. Check logs for details."
     fi
     exit 1
 fi
 
-# Clean up old backups
-log_message "INFO" "Cleaning up backups older than ${RETENTION_DAYS} days"
-DELETED_COUNT=0
-while IFS= read -r old_backup; do
-    if [ -f "$old_backup" ]; then
-        rm -f "$old_backup"
-        log_message "INFO" "Deleted old backup: $(basename $old_backup)"
-        ((DELETED_COUNT++))
-    fi
-done < <(find $BACKUP_DIR -name "backup_*.sql.gz" -mtime +${RETENTION_DAYS} -type f 2>/dev/null)
-
-if [ $DELETED_COUNT -gt 0 ]; then
-    log_message "INFO" "Deleted $DELETED_COUNT old backup(s)"
-fi
-
-# Count remaining backups
-BACKUP_COUNT=$(ls -1 $BACKUP_DIR/backup_*.sql.gz 2>/dev/null | wc -l)
-log_message "INFO" "Total backups retained: ${BACKUP_COUNT}"
-
-# Create latest symlink for easy access
-ln -sf "$BACKUP_PATH" "${BACKUP_DIR}/latest.sql.gz"
-
-# Optional: Sync to secondary location
-SECONDARY_BACKUP="/volume1/backups/trading-service"
-if [ -d "/volume1/backups" ]; then
-    log_message "INFO" "Syncing to secondary backup location"
-    mkdir -p $SECONDARY_BACKUP
-    if rsync -av --delete $BACKUP_DIR/ $SECONDARY_BACKUP/ >> $LOG_FILE 2>&1; then
-        log_message "INFO" "Secondary backup sync completed"
-    else
-        log_message "WARNING" "Secondary backup sync failed"
-    fi
-fi
-
-# Report success
-log_message "INFO" "Backup process completed successfully"
-
-# Send success notification if configured
-if [ "$NOTIFY_ON_SUCCESS" = true ] && [ -n "$NOTIFY_EMAIL" ]; then
-    send_notification "Backup Successful" "Backup ${BACKUP_FILE} created successfully (${BACKUP_SIZE})"
-fi
-
-# Log summary statistics
-log_message "INFO" "========================================="
-log_message "INFO" "Backup Summary:"
-log_message "INFO" "  File: ${BACKUP_FILE}"
-log_message "INFO" "  Size: ${BACKUP_SIZE}"
-log_message "INFO" "  Retained backups: ${BACKUP_COUNT}"
-log_message "INFO" "  Deleted old backups: ${DELETED_COUNT}"
-log_message "INFO" "========================================="
-
+log_message "INFO" "Backup process completed"
 exit 0

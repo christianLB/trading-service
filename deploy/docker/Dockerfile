@@ -48,7 +48,6 @@ COPY --from=builder /usr/local/lib/python3.10/site-packages /usr/local/lib/pytho
 COPY --from=builder /usr/local/bin /usr/local/bin
 
 COPY --chown=appuser:appuser . .
-COPY --chown=appuser:appuser entrypoint.sh /app/
 RUN chmod +x /app/entrypoint.sh
 
 USER appuser
