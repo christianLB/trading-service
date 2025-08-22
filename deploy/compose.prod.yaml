@@ -1,0 +1,91 @@
+# Production Docker Compose Override
+# This file extends compose.yaml with production-specific configurations
+# Usage: docker compose -f compose.yaml -f compose.prod.yaml up -d
+
+services:
+  api:
+    image: trading-service:prod
+    restart: unless-stopped
+    volumes: []  # Remove source code mount for production
+    environment:
+      - WORKERS=${WORKERS:-4}
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  db:
+    restart: unless-stopped
+    ports: []  # Remove external port exposure
+    volumes:
+      - trading_postgres_data:/var/lib/postgresql/data
+      - trading_postgres_backups:/backups
+      - ./scripts/backup-db.sh:/usr/local/bin/backup-db.sh:ro
+    environment:
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-zs6Fl+uC0XyqR7E7xFU2pats}
+      - POSTGRES_DB=trading
+      - POSTGRES_USER=postgres
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  redis:
+    restart: unless-stopped
+    ports: []  # Remove external port exposure
+    volumes:
+      - trading_redis_data:/data
+    command: redis-server --appendonly yes --appendfsync everysec --maxmemory 256mb --maxmemory-policy allkeys-lru
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+volumes:
+  trading_postgres_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /volume1/docker/trading-service/postgres_data
+
+  trading_postgres_backups:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /volume1/docker/trading-service/postgres_backups
+
+  trading_redis_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /volume1/docker/trading-service/redis_data

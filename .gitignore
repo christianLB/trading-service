@@ -1,0 +1,76 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Environment
+.env
+.env.dev
+.env.prod
+*.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Docker
+*.log
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Secrets
+secrets/*
+!secrets/README.md
+*.pem
+*.key
+*.crt
+
+# Backups
+*.bak
+*.backup
+*_backup/
+backups/
+postgres_backups/
+
+# Redis
+dump.rdb
+
+# PostgreSQL  
+postgres_data/
+
+# Trading specific
+trading_logs/
+performance_reports/
+backtest_results/
